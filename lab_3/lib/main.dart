@@ -278,7 +278,7 @@ class _TransformPageState extends State<_TransformPage> with SingleTickerProvide
 
    animationSize = Tween(begin: 0.0, end: 300.0).animate(controller)..addListener(() {
 
-   });;
+   });
 
    controller.forward();
   }
