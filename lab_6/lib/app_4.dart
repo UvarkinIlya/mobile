@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lab_6/menu.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,6 +30,27 @@ class RectModel{
   String get text => _text;
 }
 
+class Note {
+  int? id;
+  final String note;
+  
+  Note(this.note);
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'note': note,
+    };
+  }
+
+
+
+  @override
+  String toString() {
+    return 'Note{id: $id, note: $note}';
+  }
+}
+
 class App4 extends StatefulWidget {
   App4({Key? key}) : super(key: key);
 
@@ -38,18 +60,60 @@ class App4 extends StatefulWidget {
 
 class _App4State extends State<App4> {
   var _controller = TextEditingController();
-  final Future<SharedPreferences> _prefs = SharedPreferences.getInstance();
+  var dbPath = "";
+  var database;
 
-  late List<String> _nodes = <String>[];
+  late List<Note> _nodes = <Note>[];
   @override
   void initState() {
     super.initState();
-    _prefs.then((prefs) {
-      _nodes = prefs.getStringList("notes")!;
-      setState(() {});
-    });
+    WidgetsFlutterBinding.ensureInitialized();
 
+    getDatabasesPath().then((value) => dbPath = value);
+    database = openDatabase(
+      join(dbPath, 'doggie_database.db'),
+      onCreate: (db, version) {
+        return db.execute('CREATE TABLE notes(id INTEGER PRIMARY KEY, note TEXT)');
+      },
+      version: 1,
+    );
+
+    notes().then((value) => _nodes = value);
     _controller = TextEditingController();
+  }
+  
+  Future<void> insertNote(Note note) async {
+    final db = await database;
+    
+    await db.insert(
+      'notes',
+      note.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Note>> notes() async {
+    final db = await database;
+
+    final List<Map<String, dynamic>> maps = await db.query('notes');
+
+    return List.generate(maps.length, (i) {
+      return Note(
+        maps[i]['note']
+        //id: maps[i]['id'],
+        //note: maps[i]['note'],
+      );
+    });
+  }
+
+  Future<void> deleteNote(String note) async {
+    final db = await database;
+
+    await db.delete(
+      'notes',
+      where: 'note = ?',
+      whereArgs: [note],
+    );
   }
 
   @override
@@ -63,12 +127,20 @@ class _App4State extends State<App4> {
                 itemCount: _nodes.length,
                 scrollDirection: Axis.vertical,
                 shrinkWrap: true,
-                itemBuilder: (context, index) => Container(
-                  height: 100,
-                  width: 100,
+                itemBuilder: (context, index) => TextButton(
+                  // height: 100,
+                  // width: 100,
+                  onPressed: () {
+                    deleteNote(_nodes[index].note).then((value) {
+                      notes().then((value){
+                        _nodes = value;
+                        setState(() {});
+                      });
+                    });
+                  },
                   child: Center(
                     child: Text(
-                      _nodes[index],
+                      _nodes[index].note,
                       style: const TextStyle(fontSize: 22),
                     ),
                   ),
@@ -99,16 +171,9 @@ class _App4State extends State<App4> {
               TextButton(
                 onPressed: () {
                   if (_controller.text.isNotEmpty){
-                    List<String>? nodes;
-                    _prefs.then((prefs) {
-                      var notes = prefs.getStringList("notes");
-                      notes ??= [];
-                      notes.add(_controller.text);
-
-                      prefs.setStringList("notes", notes);
-                      setState(() {
-                        _nodes = notes!;
-                      });
+                    insertNote(Note(_controller.text)).then((v){
+                      notes().then((value) => _nodes = value);
+                      setState(() {});
                     });
                   }
 
